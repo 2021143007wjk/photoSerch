@@ -109,6 +109,8 @@ COLMAP으로 영상에서 추출한 수천 장의 프레임을 분석하여 카�
 
 ### fastAPI를 통한 구현
 COLMAP이 생성한 원본 3D 데이터(points3D.bin)를 웹 브라우저(Three.js)가 쉽게 읽을 수 있고, 로딩 속도도 빠르도록 가볍게 변환하여 사용하였다. uvicorn을 이용한 서버 구축을 하여 fastAPI를 사용해 StreetCLIP의 예측 결과를 웹에 띄웠다.
+![cmd](fastapi.png)
+
 
 ## 4. 프로젝트 결과 및 성과 (Results)
 
