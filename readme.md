@@ -117,6 +117,7 @@ COLMAP이 생성한 원본 3D 데이터(points3D.bin)를 웹 브라우저(Three.
 
 ![res](result.png)
 
+실행 동영상 링크(https://youtu.be/v5tq117pF0U)
 
 ## 5. 결론 및 향후 과제 
 
