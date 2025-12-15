@@ -2,63 +2,113 @@
 
 ## 1. 프로젝트 개요 (Project Overview)
 
-### 1.1 프로젝트 배경 및 목적
+### 프로젝트 배경 및 목적
 
 본 프로젝트는 신구대학교 캠퍼스 공간을 대상으로 COLMAP 기반의 고정밀 3D 맵을 구축하고, StreetCLIP 딥러닝 모델을 활용하여 사용자가 촬영한 사진과 3D 맵을 매칭하는 시스템을 개발하는 것을 목표로 한다. 이를 통해 GPS 신호 수신이 불가능한 지하 공간이나 복잡한 실내에서도 사진 한 장으로 현재 위치를 정확히 파악할 수 있는 시각적 위치 추정(Visual Localization) 솔루션을 제공하고자 한다.
 
-### 1.2 핵심 목표
+### 핵심 목표
 
 | 목표 | 설명 |
 |:----|:----|
-| **3D 공간 데이터 구축** | 신구대학교 주요 구역의 영상 데이터를 수집하고, COLMAP을 활용하여 정밀한 3차원 포인트 클라우드(Point Cloud) 지도를 구축한다. |
+| **3D 공간 데이터 구축** | 신구대학교 주요 구역의 영상 데이터를 수집하고, COLMAP을 활용하여 정밀한 3차원 포인트 클라우드 지도를 구축한다. |
 | **시각적 위치 검색** | StreetCLIP 모델을 도입하여, 사용자가 촬영한 2D 쿼리 이미지를 3D 지도 상의 가장 유사한 위치와 매칭하는 AI 검색 엔진을 개발한다. |
 | **사용자 친화적 시각화** | 추정된 위치를 학교 평면도 위에 직관적으로 표시하여 사용자가 자신의 위치를 쉽게 파악할 수 있도록 한다. |
 
 위 세 가지를 목표로 삼아 사진 한 장으로 위치를 간단히 파악할 수 있도록 한다.
 
-## 2. 기술 스택 및 시스템 아키텍처
+## 2. 기술 스택
 
-본 프로젝트는 최신 컴퓨터 비전 기술과 딥러닝 모델을 결합한 하이브리드 아키텍처를 채택했습니다
+| 주요 라이브러리 | 설명 |
+|:----|:----|
+| **torch** | 고속 행렬 연산(유사도 계산 torch.mm) 및 딥러닝 모델 실행에 사용되었다 |
+| **transformers** | 고속 행렬 연산(유사도 계산 torch.mm) 및 딥러닝 모델 실행에 사용되었다 |
+| **fastapi** | 이미지를 업로드받고 결과를 JSON으로 돌려주는 웹 프레임워크 |
+| **uvicorn** | FastAPI를 실행시켜 주는 고성능 ASGI 서버 |
+| **pandas** | image_metadata_with_6dof.csv 파일(위치 정보)을 읽고 다루는 데 사용되었다 |
+| **numpy** | .npy 파일(특징점 DB)을 로딩하고 숫자를 다루는 데 사용되었다 |
+| **Pillow** | 업로드된 이미지 파일을 열고(Image.open) 모델에 넣을 수 있게 변환하는 데 사용되었다 |
+| **Three.js** | 웹 브라우저에서 3D 공간을 만들고, 지도와 포인트 클라우드, 빨간 점(내 위치)을 그리는 핵심 엔진 |
+위 라이브러리들을 활용하여 진행하였다.
 
-### 2.1 3D 복원 (Structure from Motion)
+## 3. 개발 과정
 
-COLMAP: 영상에서 추출한 수천 장의 프레임을 분석하여 카메라의 6자유도(6-DOF) 위치와 3차원 구조를 복원하는 핵심 엔진입니다.
+### 데이터 수집 및 전처리
 
-기능: 특징점 추출(Feature Extraction), 매칭(Matching), 희소 복원(Sparse Reconstruction)을 수행하여 40개 이상의 세부 구역 맵을 생성했습니다.
+신구대학교 정문, 본관, 동관 등 주요 경로를 따라 55분 가량의 1개의 영상을 촬영했다. 특히 COLMAP의 복원율을 높이기 위해 천천히 걷기, 다양한 각도 촬영, 왕복 촬영(Loop Closure) 전략을 적용했다. 해당 영상을 0.5초 간격으로 영상을 프레임화하여 총 6000장 이상의 학습용 이미지 데이터셋을 구축했다.
 
-### 2.2 이미지 검색 및 위치 추정 (Visual Place Recognition)
+### 3D 구축
 
-StreetCLIP (OpenAI CLIP 기반): 이미지의 시각적 특징과 지리적 컨텍스트를 동시에 이해하는 멀티모달 AI 모델입니다. 위치 인식에 특화된 파인튜닝 모델을 활용하여, 조명이나 날씨 변화에 강건한 검색 성능을 제공합니다.
+COLMAP으로 영상에서 추출한 수천 장의 프레임을 분석하여 카메라의 6자유도(6-DOF) 위치와 3차원 구조를 복원하였다. 다음은 실행 코드에 대한 간단한 설명이다.
 
-Annoy (Approximate Nearest Neighbors): 고차원 벡터 공간에서 가장 유사한 이미지를 실시간으로 검색하기 위해 Spotify가 개발한 고속 인덱싱 라이브러리를 사용했습니다.
+``` 
+    # 1. 특징점 추출 (Feature Extraction)
+    # ⭐️ 수정: --SiftMatching.max_ratio 0.7 옵션을 이 단계에서 제거
+    cmd_fe = (
+        f'"{COLMAP_EXE_PATH}" feature_extractor '
+        f'--database_path "{DATABASE_PATH}" '
+        f'--image_path "{BASE_IMAGE_DIR}" '
+        f'--ImageReader.single_camera 1 ' 
+        f'--ImageReader.camera_model SIMPLE_RADIAL ' 
+        f'--SiftExtraction.use_gpu 1 '
+        f'--SiftExtraction.max_num_features {MAX_NUM_FEATURES} '
+    )
+    if not run_colmap_command(cmd_fe, "특징점 추출 및 설정"): return False
+```
+| 주요 설정 | 설명 |
+|:----|:----|
+| **--ImageReader.single_camera 1** | 카메라가 1개로 촬영되었다는 것(영상 내내 초점거리(Zoom)와 렌즈 세팅이 변하지 않았다)을 설정 |
+| **--ImageReader.camera_model SIMPLE_RADIAL** | 굴곡이 있는 렌즈로 촬영했다는 설정. 휴대전화 카메라로 촬영되었음 |
+| **--SiftExtraction.max_num_features {MAX_NUM_FEATURES}** | 사진 한 장당 특징점 발견 최대 제한. 메모리 관계상 6000개로 제한 |
 
-### 2.3 데이터 처리 및 시각화
+```
+    # 2. 특징점 매칭 (Sequential Matcher 적용)
+    # ⭐️ 수정: --SiftMatching.max_ratio 0.7 옵션을 이 단계로 이동
+    cmd_sm = (
+        f'"{COLMAP_EXE_PATH}" sequential_matcher '
+        f'--database_path "{DATABASE_PATH}" '
+        f'--SequentialMatching.overlap {OVERLAP_COUNT} ' 
+        f'--SequentialMatching.loop_detection 1 ' 
+        f'--SequentialMatching.loop_detection_period {LOOP_DETECTION_PERIOD} '
+        f'--SiftMatching.use_gpu 1 '
+        f'--SiftMatching.num_threads {os.cpu_count()} '
+        f'--SiftMatching.max_ratio 0.8'  # ⭐️ 수정: 매칭 엄격도 강화 옵션 추가
+    )
+    if not run_colmap_command(cmd_sm, "특징점 매칭 (Sequential Matcher)"): return False
+```
+| 주요 설정 | 설명 |
+|:----|:----|
+| **{COLMAP_EXE_PATH}" sequential_matcher** | 시퀀스 매칭, 사진들이 동영상처럼 순서대로(Filename 순) 찍혔다는 것을 전제로 하여 매칭 속도와 정확도를 높이는 방식 |
+| **--SequentialMatching.overlap {OVERLAP_COUNT}** | 앞뒤 사진 매칭 제한, 메모리상 20장으로 제한 |
+| **--SequentialMatching.loop_detection 1** | 루프 감지, 왕복하였기 때문에 제자리로 왔는지를 감지 |
+| **--SequentialMatching.loop_detection_period {LOOP_DETECTION_PERIOD}** | 루프 감지 제한, 50프레임마다 루프 감지 시도 |
+| **--SiftMatching.max_ratio 0.8** | 매칭의 엄격함의 정도, 기본값이 0.8 |
+```
+    # 3. 구조 복원 (Mapper)
+    cmd_map = (
+        f'"{COLMAP_EXE_PATH}" mapper '
+        f'--database_path "{DATABASE_PATH}" '
+        f'--image_path "{BASE_IMAGE_DIR}" '
+        f'--output_path "{SPARSE_OUTPUT_DIR}" '
+        f'--Mapper.min_num_matches 25 ' 
+        f'--Mapper.num_threads {os.cpu_count()}' 
+    )
+    if not run_colmap_command(cmd_map, "구조 복원 (Mapper)"): return False
+```
 
-OpenCV & Python: 동영상 프레임 추출, 이미지 전처리, 좌표 변환 행렬 계산 등 데이터 파이프라인 전반을 처리합니다.
+| 주요 설정 | 설명 |
+|:----|:----|
+| **--Mapper.min_num_matches 25** | 두 사진 사이의Match가 최소 25개는 되어야 유효한 연결로 인정하겠다는 설정, 기본값 15 |
+| **--Mapper.num_threads {os.cpu_count()}** | 모든 CPU 코어를 사용하여 속도를 최대한 끌어올리라는 설정, 사용 버전에는 gpu 설정이 없음 |
 
-Matplotlib & Folium: 사용자의 추정 위치를 2D 평면도 및 지도 위에 시각화하여 최종 결과를 제공합니다.
 
-## 3. 개발 과정 및 방법론 (Implementation)
-
-### 3.1 데이터 수집 및 전처리
-
-수집 전략: 신구대학교 정문, 본관, 동관 등 주요 경로를 따라 24개의 고해상도 영상을 촬영했습니다. 특히 COLMAP의 복원율을 높이기 위해 천천히 걷기, 다양한 각도 촬영, 왕복 촬영(Loop Closure) 전략을 적용했습니다.
-
-프레임 추출: 약 0.5초 간격으로 영상을 프레임화하여 총 10,000장 이상의 학습용 이미지 데이터셋을 구축했습니다.
-
-### 3.2 3D 맵 구축 및 최적화
-
-개별 복원 및 통합: 방대한 데이터를 효율적으로 처리하기 위해 영상을 24개 구역으로 나누어 개별적으로 3D 복원을 수행했습니다.
-
-데이터 정제: 복원된 40개의 맵 조각 중 경로가 찌그러지거나 추적에 실패한 'B형 맵'을 선별하고, 경로가 완벽하게 복원된 'A형 맵(앵커 맵)' 3개를 기준점으로 선정하여 전체 지도의 정확도를 확보했습니다.
-
-### 3.3 위치 추정 알고리즘 구현
+### 위치 추정 알고리즘 구현
 
 특징 추출: 구축된 3D 맵의 모든 이미지에 대해 StreetCLIP을 사용하여 768차원 특징 벡터를 추출했습니다.
 
 인덱싱: Annoy를 사용하여 벡터 데이터베이스를 구축, 밀리초(ms) 단위의 검색 속도를 구현했습니다.
 
 좌표 변환 (Georeferencing): COLMAP의 상대 좌표계를 실제 학교 평면도 좌표계와 일치시키기 위해, 3점 매칭(3-Point Correspondences) 기반의 아핀 변환(Affine Transformation) 알고리즘을 적용했습니다.
+
 
 ## 4. 프로젝트 결과 및 성과 (Results)
 
